@@ -201,7 +201,9 @@ class SVGSkin extends Skin {
         const svgText = serializeSvgToString(svgTag, this._renderer.customFonts);
         this._svgImageLoaded = false;
 
-        const {x, y, width, height} = svgTag.viewBox.baseVal;
+        let {x, y, width, height} = svgTag.viewBox.baseVal;
+        [width, height] = [Math.ceil(width), Math.ceil(height)];
+        
         // While we're setting the size before the image is loaded, this doesn't cause the skin to appear with the wrong
         // size for a few frames while the new image is loading, because we don't emit the `WasAltered` event, telling
         // drawables using this skin to update, until the image is loaded.
