@@ -1,6 +1,6 @@
-# TurboWarp/scratch-render
+# Nitro-Bolt/scratch-render
 
-scratch-render modified for use in [TurboWarp](https://turbowarp.org/). We've optimized some operations and added a lot of options.
+scratch-render modified for use in [NitroBolt](https://nitrobolt.org/). We've optimized some operations and added a lot of options.
 
 ## Setup
 
@@ -10,7 +10,7 @@ If you just want to play with the render then it's the same process as upstream 
 
 ## API
 
-Public APIs are compatible with a vanilla scratch-render. TurboWarp/scratch-render is a drop-in replacement for scratch-render.
+Public APIs are compatible with a vanilla scratch-render. Nitro-Bolt/scratch-render is a drop-in replacement for scratch-render.
 
 Notable public API additions include:
 
