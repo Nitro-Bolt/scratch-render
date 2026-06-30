@@ -108,6 +108,7 @@ class Drawable {
         this._inverseMatrix = twgl.m4.identity();
         this._inverseTransformDirty = true;
         this._visible = true;
+        this.z = 0;
 
         /** A bitmask identifying which effects are currently in use.
          * @readonly

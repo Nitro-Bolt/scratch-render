@@ -707,6 +707,16 @@ class RenderWebGL extends EventEmitter {
         const drawableID = this._nextDrawableId++;
         const drawable = new Drawable(drawableID, this);
         this._allDrawables[drawableID] = drawable;
+
+        const currentLayerGroup = this._layerGroups[group];
+        const endIndex = this._endIndexForKnownLayerGroup(currentLayerGroup);
+        let maxZ = -Infinity;
+        for (let i = currentLayerGroup.drawListOffset; i < endIndex; i++) {
+            const d = this._allDrawables[this._drawList[i]];
+            if (d && d.z > maxZ) maxZ = d.z;
+        }
+        drawable.z = maxZ === -Infinity ? 1 : maxZ + 1;
+
         this._addToDrawList(drawableID, group);
         // tw: implement high quality render
         drawable.setHighQuality(this.useHighQualityRender);
@@ -763,14 +773,22 @@ class RenderWebGL extends EventEmitter {
         }
     }
 
+    _insertDrawableSorted (drawableID, startIndex, endIndex) {
+        const drawable = this._allDrawables[drawableID];
+        let insertIndex = startIndex;
+        while (insertIndex < endIndex) {
+            const existing = this._allDrawables[this._drawList[insertIndex]];
+            if (existing && existing.z > drawable.z) break;
+            insertIndex++;
+        }
+        this._drawList.splice(insertIndex, 0, drawableID);
+    }
+
     _addToDrawList (drawableID, group) {
         const currentLayerGroup = this._layerGroups[group];
-        const currentGroupOrderingIndex = currentLayerGroup.groupIndex;
-
-        const drawListOffset = this._endIndexForKnownLayerGroup(currentLayerGroup);
-        this._drawList.splice(drawListOffset, 0, drawableID);
-
-        this._updateOffsets('add', currentGroupOrderingIndex);
+        const endIndex = this._endIndexForKnownLayerGroup(currentLayerGroup);
+        this._insertDrawableSorted(drawableID, currentLayerGroup.drawListOffset, endIndex);
+        this._updateOffsets('add', currentLayerGroup.groupIndex);
     }
 
     _updateOffsets (updateType, currentGroupOrderingIndex) {
@@ -839,7 +857,9 @@ class RenderWebGL extends EventEmitter {
      * @return {number} The postion of the given drawable ID.
      */
     getDrawableOrder (drawableID) {
-        return this._drawList.indexOf(drawableID);
+        const drawable = this._allDrawables[drawableID];
+        if (drawable) return drawable.z;
+        return null;
     }
 
     /**
@@ -856,12 +876,14 @@ class RenderWebGL extends EventEmitter {
      * of the layer group.
      * @param {boolean=} optIsRelative If set, `order` refers to a relative change.
      * @param {number=} optMin If set, order constrained to be at least `optMin`.
+     * @param {boolean=} optZRelative If set alongside optIsRelative, adjusts z value
+     * directly instead of positional move.
      * @return {?number} New order if changed, or null.
      */
-    setDrawableOrder (drawableID, order, group, optIsRelative, optMin) {
+    setDrawableOrder (drawableID, order, group, optIsRelative, optMin, optZRelative) {
         if (!group || !Object.prototype.hasOwnProperty.call(this._layerGroups, group)) {
             log.warn('Cannot set the order of a drawable without a known layer group.');
-            return;
+            return null;
         }
 
         this.dirty = true;
@@ -869,39 +891,41 @@ class RenderWebGL extends EventEmitter {
         const startIndex = currentLayerGroup.drawListOffset;
         const endIndex = this._endIndexForKnownLayerGroup(currentLayerGroup);
 
-        let oldIndex = startIndex;
-        while (oldIndex < endIndex) {
-            if (this._drawList[oldIndex] === drawableID) {
-                break;
+        const oldIndex = this._drawList.indexOf(drawableID, startIndex);
+        if (oldIndex >= endIndex) return null;
+
+        const drawable = this._allDrawables[drawableID];
+        if (optIsRelative && order === 0) return drawable.z;
+
+        this._drawList.splice(oldIndex, 1);
+        const adjustedEnd = this._endIndexForKnownLayerGroup(currentLayerGroup);
+
+        if (optIsRelative && optZRelative) {
+            drawable.z += order;
+        } else if (optIsRelative) {
+            if (adjustedEnd <= startIndex) {
+                drawable.z = order > 0 ? 1 : -1;
+            } else if (order > 0) {
+                const targetIdx = Math.min(oldIndex + order - 1, adjustedEnd - 1);
+                drawable.z = this._allDrawables[this._drawList[targetIdx]].z + 1;
+            } else {
+                const targetIdx = Math.max(oldIndex + order, startIndex);
+                drawable.z = this._allDrawables[this._drawList[targetIdx]].z - 1;
             }
-            oldIndex++;
+        } else if (order === Infinity) {
+            drawable.z = adjustedEnd > startIndex
+                ? this._allDrawables[this._drawList[adjustedEnd - 1]].z + 1
+                : 1;
+        } else if (order === -Infinity) {
+            drawable.z = adjustedEnd > startIndex
+                ? this._allDrawables[this._drawList[startIndex]].z - 1
+                : -1;
+        } else {
+            drawable.z = order;
         }
 
-        if (oldIndex < endIndex) {
-            // Remove drawable from the list.
-            if (order === 0) {
-                return oldIndex;
-            }
-
-            const _ = this._drawList.splice(oldIndex, 1)[0];
-            // Determine new index.
-            let newIndex = order;
-            if (optIsRelative) {
-                newIndex += oldIndex;
-            }
-
-            const possibleMin = (optMin || 0) + startIndex;
-            const min = (possibleMin >= startIndex && possibleMin < endIndex) ? possibleMin : startIndex;
-            newIndex = Math.max(newIndex, min);
-
-            newIndex = Math.min(newIndex, endIndex);
-
-            // Insert at new index.
-            this._drawList.splice(newIndex, 0, drawableID);
-            return newIndex;
-        }
-
-        return null;
+        this._insertDrawableSorted(drawableID, startIndex, adjustedEnd);
+        return drawable.z;
     }
 
     skinWasAltered (skin) {
