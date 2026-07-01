@@ -914,11 +914,11 @@ class RenderWebGL extends EventEmitter {
             }
         } else if (order === Infinity) {
             drawable.z = adjustedEnd > startIndex
-                ? this._allDrawables[this._drawList[adjustedEnd - 1]].z + 1
+                ? this._allDrawables[this._drawList[adjustedEnd - 1]].z
                 : 1;
         } else if (order === -Infinity) {
             drawable.z = adjustedEnd > startIndex
-                ? this._allDrawables[this._drawList[startIndex]].z - 1
+                ? this._allDrawables[this._drawList[startIndex]].z
                 : -1;
         } else {
             drawable.z = order;
