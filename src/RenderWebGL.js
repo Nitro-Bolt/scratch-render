@@ -710,12 +710,12 @@ class RenderWebGL extends EventEmitter {
 
         const currentLayerGroup = this._layerGroups[group];
         const endIndex = this._endIndexForKnownLayerGroup(currentLayerGroup);
-        let maxZ = -Infinity;
+        let minZ = Infinity;
         for (let i = currentLayerGroup.drawListOffset; i < endIndex; i++) {
             const d = this._allDrawables[this._drawList[i]];
-            if (d && d.z > maxZ) maxZ = d.z;
+            if (d && d.z < minZ) minZ = d.z;
         }
-        drawable.z = maxZ === -Infinity ? 1 : maxZ + 1;
+        drawable.z = minZ === Infinity ? 1 : minZ - 1;
 
         this._addToDrawList(drawableID, group);
         // tw: implement high quality render
@@ -778,7 +778,7 @@ class RenderWebGL extends EventEmitter {
         let insertIndex = startIndex;
         while (insertIndex < endIndex) {
             const existing = this._allDrawables[this._drawList[insertIndex]];
-            if (existing && existing.z > drawable.z) break;
+            if (existing && existing.z < drawable.z) break;
             insertIndex++;
         }
         this._drawList.splice(insertIndex, 0, drawableID);
@@ -907,10 +907,10 @@ class RenderWebGL extends EventEmitter {
                 drawable.z = order > 0 ? 1 : -1;
             } else if (order > 0) {
                 const targetIdx = Math.min(oldIndex + order - 1, adjustedEnd - 1);
-                drawable.z = this._allDrawables[this._drawList[targetIdx]].z + 1;
+                drawable.z = this._allDrawables[this._drawList[targetIdx]].z - 1;
             } else {
                 const targetIdx = Math.max(oldIndex + order, startIndex);
-                drawable.z = this._allDrawables[this._drawList[targetIdx]].z - 1;
+                drawable.z = this._allDrawables[this._drawList[targetIdx]].z + 1;
             }
         } else if (order === Infinity) {
             drawable.z = adjustedEnd > startIndex
