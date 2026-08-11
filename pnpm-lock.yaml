@@ -16,7 +16,7 @@ importers:
         version: 0.2.0
       '@turbowarp/scratch-svg-renderer':
         specifier: ^1.0.0-202312242305-12c360b
-        version: 1.0.202505311824
+        version: 1.0.202505311824(scratch-render-fonts@https://codeload.github.com/TurboWarp/scratch-render-fonts/tar.gz/7b6768fc6dfef6b343a06f992587b74807043961)
       grapheme-breaker:
         specifier: 0.3.2
         version: 0.3.2
@@ -29,6 +29,9 @@ importers:
       raw-loader:
         specifier: ^0.5.1
         version: 0.5.1
+      scratch-render-fonts:
+        specifier: github:TurboWarp/scratch-render-fonts#master
+        version: https://codeload.github.com/TurboWarp/scratch-render-fonts/tar.gz/7b6768fc6dfef6b343a06f992587b74807043961
       scratch-storage:
         specifier: ^1.0.0
         version: 1.3.5(webpack@4.47.0)
@@ -273,6 +276,7 @@ packages:
 
   '@turbowarp/scratch-svg-renderer@1.0.202505311824':
     resolution: {integrity: sha512-EaKVqIuEwrr4SzQGOVyr8GBE+DGzUbbn38qiV6DMWFzb++/HgWl1qdlKA/j+mOK+GDwYydMFP0FuWYvWBkt6sA==}
+    version: 1.0.202505311824
     peerDependencies:
       scratch-render-fonts: github:TurboWarp/scratch-render-fonts#master
 
@@ -3323,6 +3327,10 @@ packages:
     resolution: {integrity: sha512-7kjxoxivLgYYvmAJVLOOWnca4CigwuCpgjy9+6UuxOMgSZKO1xqIjxIADupabmh1ZLZZDVe45DBM/CQTdtVDkw==}
     engines: {node: '>=8.0'}
 
+  scratch-render-fonts@https://codeload.github.com/TurboWarp/scratch-render-fonts/tar.gz/7b6768fc6dfef6b343a06f992587b74807043961:
+    resolution: {tarball: https://codeload.github.com/TurboWarp/scratch-render-fonts/tar.gz/7b6768fc6dfef6b343a06f992587b74807043961}
+    version: 1.0.0
+
   scratch-sb1-converter@0.2.7:
     resolution: {integrity: sha512-MF1NzmRLbgCiq7wiSTuk2C9rQC8uM5Wj7SaYsn1SEMWNK9rtK0uc3LSm8FnEt14QS/1Icx2YgMsUPKR0HaPDdQ==}
 
@@ -4301,12 +4309,13 @@ snapshots:
 
   '@turbowarp/nanolog@0.2.0': {}
 
-  '@turbowarp/scratch-svg-renderer@1.0.202505311824':
+  '@turbowarp/scratch-svg-renderer@1.0.202505311824(scratch-render-fonts@https://codeload.github.com/TurboWarp/scratch-render-fonts/tar.gz/7b6768fc6dfef6b343a06f992587b74807043961)':
     dependencies:
       '@turbowarp/nanolog': 0.2.0
       base64-js: 1.2.1
       base64-loader: 1.0.0
       dompurify: 2.5.8
+      scratch-render-fonts: https://codeload.github.com/TurboWarp/scratch-render-fonts/tar.gz/7b6768fc6dfef6b343a06f992587b74807043961
       transformation-matrix: 1.15.0
 
   '@types/glob@7.2.0':
@@ -8091,6 +8100,10 @@ snapshots:
       ajv: 6.3.0
       jszip: 3.1.5
       pify: 4.0.1
+
+  scratch-render-fonts@https://codeload.github.com/TurboWarp/scratch-render-fonts/tar.gz/7b6768fc6dfef6b343a06f992587b74807043961:
+    dependencies:
+      base64-loader: 1.0.0
 
   scratch-sb1-converter@0.2.7:
     dependencies:
