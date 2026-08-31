@@ -161,8 +161,15 @@ class PenSkin extends Skin {
      */
     dispose () {
         this._renderer.removeListener(RenderConstants.Events.NativeSizeChanged, this.onNativeSizeChanged);
-        this._renderer.gl.deleteTexture(this._texture);
+        const gl = this._renderer.gl;
+        gl.deleteTexture(this._texture);
+        if (this._framebuffer) gl.deleteFramebuffer(this._framebuffer.framebuffer);
+        gl.deleteBuffer(this.a_position_glbuffer);
+        gl.deleteBuffer(this.attribute_glbuffer);
         this._texture = null;
+        this._framebuffer = null;
+        this.a_position_glbuffer = null;
+        this.attribute_glbuffer = null;
         super.dispose();
     }
 
@@ -489,6 +496,7 @@ class PenSkin extends Skin {
 
         // tw: store current texture to redraw it later
         const oldTexture = this._texture;
+        const oldFramebuffer = this._framebuffer;
 
         this._texture = twgl.createTexture(
             gl,
@@ -508,13 +516,8 @@ class PenSkin extends Skin {
             }
         ];
 
-        if (this._framebuffer) {
-            // tw: resize framebuffer info doesn't work here, so always make a new framebuffer
-            // twgl.resizeFramebufferInfo(gl, this._framebuffer, attachments, width, height);
-            this._framebuffer = twgl.createFramebufferInfo(gl, attachments, width, height);
-        } else {
-            this._framebuffer = twgl.createFramebufferInfo(gl, attachments, width, height);
-        }
+        // tw: resize framebuffer info doesn't work here, so always make a new framebuffer
+        this._framebuffer = twgl.createFramebufferInfo(gl, attachments, width, height);
 
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
@@ -522,7 +525,9 @@ class PenSkin extends Skin {
         // tw: preserve old texture when resizing
         if (oldTexture) {
             this._drawPenTexture(oldTexture);
+            gl.deleteTexture(oldTexture);
         }
+        if (oldFramebuffer) gl.deleteFramebuffer(oldFramebuffer.framebuffer);
 
         this._silhouettePixels = new Uint8Array(Math.floor(width * height * 4));
         this._silhouetteImageData = new ImageData(width, height);
