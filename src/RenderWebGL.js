@@ -13,7 +13,6 @@ const RenderConstants = require('./RenderConstants');
 const ShaderManager = require('./ShaderManager');
 const SVGSkin = require('./SVGSkin');
 const TextBubbleSkin = require('./TextBubbleSkin');
-const TextWrapper = require('./util/text-wrapper');
 const EffectTransform = require('./EffectTransform');
 const CanvasMeasurementProvider = require('./util/canvas-measurement-provider');
 const log = require('./util/log');
@@ -1949,11 +1948,8 @@ class RenderWebGL extends EventEmitter {
                 wrapWidth = stageRight - x;
             }
             wrapWidth = Math.max(1, Math.min(this._nativeSize[0], wrapWidth));
-            const wrapper = new TextWrapper({
-                beginMeasurementSession: () => null,
-                measureText: value => measurementContext.measureText(value).width,
-                endMeasurementSession: () => {}
-            });
+            const measurementProvider = new CanvasMeasurementProvider(measurementContext);
+            const wrapper = this.createTextWrapper(measurementProvider);
             lines = wrapper.wrapText(wrapWidth, text);
         } else {
             lines = text.split('\n');
