@@ -247,6 +247,9 @@ class RenderWebGL extends EventEmitter {
         // tw: track id of pen skin
         this._penSkinId = null;
 
+        // nb: multiple Pen papers can each own a Pen skin.
+        this._penSkinIds = new Set();
+
         this.useHighQualityRender = false;
 
         this.offscreenTouching = false;
@@ -336,8 +339,8 @@ class RenderWebGL extends EventEmitter {
         this._updateRenderQuality();
     }
     _updateRenderQuality () {
-        if (this._penSkinId !== null) {
-            const skin = this._allSkins[this._penSkinId];
+        for (const skinId of this._penSkinIds) {
+            const skin = this._allSkins[skinId];
             if (skin) {
                 if (this.useHighQualityRender) {
                     skin.setRenderQuality(this.canvas.width / this._nativeSize[0]);
@@ -596,8 +599,11 @@ class RenderWebGL extends EventEmitter {
         this._allSkins[skinId] = newSkin;
         // tw: track id of pen skin
         this._penSkinId = skinId;
+        this._penSkinIds.add(skinId);
         // tw: high quality pen may have been enabled before the pen skin was created
-        this._updateRenderQuality();
+        if (this.useHighQualityRender) {
+            newSkin.setRenderQuality(this.canvas.width / this._nativeSize[0]);
+        }
         return skinId;
     }
 
@@ -694,6 +700,10 @@ class RenderWebGL extends EventEmitter {
         const oldSkin = this._allSkins[skinId];
         oldSkin.dispose();
         delete this._allSkins[skinId];
+        if (this._penSkinIds.delete(skinId) && this._penSkinId === skinId) {
+            const remainingPenSkinIds = Array.from(this._penSkinIds);
+            this._penSkinId = remainingPenSkinIds.length ? remainingPenSkinIds[remainingPenSkinIds.length - 1] : null;
+        }
     }
 
     /**
@@ -1903,6 +1913,107 @@ class RenderWebGL extends EventEmitter {
         this.dirty = true;
         const skin = /** @type {PenSkin} */ this._allSkins[penSkinID];
         skin.drawLine(penAttributes, x0, y0, x1, y1);
+    }
+
+    /**
+     * Draw text onto a pen layer with its first baseline starting at the given Scratch position.
+     * @param {int} penSkinID - the unique ID of a Pen Skin.
+     * @param {string} text - text to draw; line breaks create additional lines.
+     * @param {object} attributes - CSS-compatible font and color attributes.
+     * @param {number} x - Scratch x coordinate of the first baseline.
+     * @param {number} y - Scratch y coordinate of the first baseline.
+     * @returns {Promise<void>} resolves after the text has been drawn
+     */
+    async penText (penSkinID, text, attributes, x, y) {
+        const font = `${attributes.italic ? 'italic ' : ''}${attributes.weight} ` +
+            `${attributes.size}px ${attributes.family}`;
+        if (document.fonts && document.fonts.load) {
+            await document.fonts.load(font, text);
+        }
+
+        const measurementCanvas = document.createElement('canvas');
+        const measurementContext = measurementCanvas.getContext('2d');
+        measurementContext.font = font;
+        measurementContext.textAlign = attributes.alignment;
+        let lines;
+        if (attributes.wordWrap) {
+            const stageLeft = -this._nativeSize[0] / 2;
+            const stageRight = this._nativeSize[0] / 2;
+            let wrapWidth;
+            if (attributes.alignment === 'right') {
+                wrapWidth = x - stageLeft;
+            } else if (attributes.alignment === 'center') {
+                wrapWidth = Math.min(x - stageLeft, stageRight - x) * 2;
+            } else {
+                wrapWidth = stageRight - x;
+            }
+            wrapWidth = Math.max(1, Math.min(this._nativeSize[0], wrapWidth));
+            const measurementProvider = new CanvasMeasurementProvider(measurementContext);
+            const wrapper = this.createTextWrapper(measurementProvider);
+            lines = wrapper.wrapText(wrapWidth, text);
+        } else {
+            lines = text.split('\n');
+        }
+        const metrics = lines.map(line => measurementContext.measureText(line || ' '));
+        const strokePadding = Math.ceil(attributes.strokeWidth / 2) + 1;
+        const leftBearing = Math.max(0, ...metrics.map(line => line.actualBoundingBoxLeft || 0));
+        const rightBearing = Math.max(0, ...metrics.map(line => line.actualBoundingBoxRight || line.width));
+        const textWidth = Math.max(1, leftBearing + rightBearing);
+        const ascent = Math.max(1, ...metrics.map(line => line.actualBoundingBoxAscent || attributes.size));
+        const descent = Math.max(0, ...metrics.map(line => line.actualBoundingBoxDescent || 0));
+        const lineHeight = Math.max(1, attributes.size * 1.2);
+        const baselineX = strokePadding + leftBearing;
+        const baselineY = strokePadding + ascent;
+
+        const penSkin = /** @type {PenSkin} */ this._allSkins[penSkinID];
+        if (!(penSkin instanceof PenSkin)) return;
+        const quality = penSkin.renderQuality;
+        const logicalWidth = Math.min(this.maxTextureDimension / quality,
+            Math.max(1, Math.ceil(textWidth + (strokePadding * 2))));
+        const logicalHeight = Math.min(this.maxTextureDimension / quality, Math.max(1, Math.ceil(
+            baselineY + descent + ((lines.length - 1) * lineHeight) + strokePadding
+        )));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.ceil(logicalWidth * quality);
+        canvas.height = Math.ceil(logicalHeight * quality);
+        canvas.reusable = false;
+        const context = canvas.getContext('2d');
+        context.scale(quality, quality);
+        context.font = font;
+        context.textBaseline = 'alphabetic';
+        context.textAlign = attributes.alignment;
+        context.lineJoin = 'round';
+        context.fillStyle = attributes.color;
+        context.strokeStyle = attributes.strokeColor;
+        context.lineWidth = attributes.strokeWidth;
+        for (let index = 0; index < lines.length; index++) {
+            const lineY = baselineY + (index * lineHeight);
+            if (attributes.strokeWidth > 0) context.strokeText(lines[index], baselineX, lineY);
+            context.fillText(lines[index], baselineX, lineY);
+        }
+
+        const skinID = this._nextSkinId++;
+        const textSkin = new BitmapSkin(skinID, this);
+        textSkin.setBitmap(canvas, quality);
+        this._allSkins[skinID] = textSkin;
+        const drawableID = this._nextDrawableId++;
+        const drawable = new Drawable(drawableID, this);
+        drawable.setHighQuality(this.useHighQualityRender);
+        drawable.skin = textSkin;
+        drawable.updatePosition([
+            x + (logicalWidth / 2) - baselineX,
+            y + baselineY - (logicalHeight / 2)
+        ]);
+        this._allDrawables[drawableID] = drawable;
+
+        try {
+            this.penStamp(penSkinID, drawableID);
+        } finally {
+            drawable.dispose();
+            delete this._allDrawables[drawableID];
+            this.destroySkin(skinID);
+        }
     }
 
     /**
