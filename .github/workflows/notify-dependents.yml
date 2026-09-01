@@ -3,7 +3,7 @@ name: Notify Dependents
 on:
   push:
     branches:
-      - develop-builds
+      - develop
   workflow_dispatch:
   workflow_call:
     inputs: {}
