@@ -1927,8 +1927,7 @@ class RenderWebGL extends EventEmitter {
     penText (penSkinID, text, attributes, x, y) {
         const font = `${attributes.italic ? 'italic ' : ''}${attributes.weight} ` +
             `${attributes.size}px ${attributes.family}`;
-        if (document.fonts && document.fonts.load &&
-            (!document.fonts.check || !document.fonts.check(font, text))) {
+        if (!document.fonts.check(font, text)) {
             return document.fonts.load(font, text).then(() => this._drawPenText(
                 penSkinID, text, attributes, x, y, font
             ));
