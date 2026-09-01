@@ -250,6 +250,14 @@ class RenderWebGL extends EventEmitter {
         // nb: multiple Pen papers can each own a Pen skin.
         this._penSkinIds = new Set();
 
+        // nb: reusable resources for rasterizing text before stamping it onto a Pen skin.
+        this._penTextMeasurementCanvas = document.createElement('canvas');
+        this._penTextMeasurementContext = this._penTextMeasurementCanvas.getContext('2d');
+        this._penTextMeasurementProvider = new CanvasMeasurementProvider(this._penTextMeasurementContext);
+        this._penTextCanvas = document.createElement('canvas');
+        this._penTextCanvas.reusable = false;
+        this._penTextSkinId = null;
+
         this.useHighQualityRender = false;
 
         this.offscreenTouching = false;
@@ -1936,10 +1944,10 @@ class RenderWebGL extends EventEmitter {
     }
 
     _drawPenText (penSkinID, text, attributes, x, y, font) {
-        const measurementCanvas = document.createElement('canvas');
-        const measurementContext = measurementCanvas.getContext('2d');
+        const measurementContext = this._penTextMeasurementContext;
         measurementContext.font = font;
         measurementContext.textAlign = attributes.alignment;
+        this._penTextMeasurementProvider.clearCache();
         let lines;
         if (attributes.wordWrap) {
             const stageLeft = -this._nativeSize[0] / 2;
@@ -1953,8 +1961,7 @@ class RenderWebGL extends EventEmitter {
                 wrapWidth = stageRight - x;
             }
             wrapWidth = Math.max(1, Math.min(this._nativeSize[0], wrapWidth));
-            const measurementProvider = new CanvasMeasurementProvider(measurementContext);
-            const wrapper = this.createTextWrapper(measurementProvider);
+            const wrapper = this.createTextWrapper(this._penTextMeasurementProvider);
             lines = wrapper.wrapText(wrapWidth, text);
         } else {
             lines = text.split('\n');
@@ -1979,10 +1986,9 @@ class RenderWebGL extends EventEmitter {
             baselineY + descent + ((lines.length - 1) * lineHeight) + strokePadding
         )));
 
-        const canvas = document.createElement('canvas');
+        const canvas = this._penTextCanvas;
         canvas.width = Math.ceil(logicalWidth * quality);
         canvas.height = Math.ceil(logicalHeight * quality);
-        canvas.reusable = false;
         const context = canvas.getContext('2d');
         context.scale(quality, quality);
         context.font = font;
@@ -1998,10 +2004,12 @@ class RenderWebGL extends EventEmitter {
             context.fillText(lines[index], baselineX, lineY);
         }
 
-        const skinID = this._nextSkinId++;
-        const textSkin = new BitmapSkin(skinID, this);
+        if (this._penTextSkinId === null) {
+            this._penTextSkinId = this._nextSkinId++;
+            this._allSkins[this._penTextSkinId] = new BitmapSkin(this._penTextSkinId, this);
+        }
+        const textSkin = this._allSkins[this._penTextSkinId];
         textSkin.setBitmap(canvas, quality);
-        this._allSkins[skinID] = textSkin;
         const drawableID = this._nextDrawableId++;
         const drawable = new Drawable(drawableID, this);
         drawable.setHighQuality(this.useHighQualityRender);
@@ -2017,7 +2025,6 @@ class RenderWebGL extends EventEmitter {
         } finally {
             drawable.dispose();
             delete this._allDrawables[drawableID];
-            this.destroySkin(skinID);
         }
     }
 
