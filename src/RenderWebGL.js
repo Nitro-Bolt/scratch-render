@@ -1922,15 +1922,21 @@ class RenderWebGL extends EventEmitter {
      * @param {object} attributes - CSS-compatible font and color attributes.
      * @param {number} x - Scratch x coordinate of the first baseline.
      * @param {number} y - Scratch y coordinate of the first baseline.
-     * @returns {Promise<void>} resolves after the text has been drawn
+     * @returns {Promise<void>|void} resolves after the text has been drawn if its font must load
      */
-    async penText (penSkinID, text, attributes, x, y) {
+    penText (penSkinID, text, attributes, x, y) {
         const font = `${attributes.italic ? 'italic ' : ''}${attributes.weight} ` +
             `${attributes.size}px ${attributes.family}`;
-        if (document.fonts && document.fonts.load) {
-            await document.fonts.load(font, text);
+        if (document.fonts && document.fonts.load &&
+            (!document.fonts.check || !document.fonts.check(font, text))) {
+            return document.fonts.load(font, text).then(() => this._drawPenText(
+                penSkinID, text, attributes, x, y, font
+            ));
         }
+        this._drawPenText(penSkinID, text, attributes, x, y, font);
+    }
 
+    _drawPenText (penSkinID, text, attributes, x, y, font) {
         const measurementCanvas = document.createElement('canvas');
         const measurementContext = measurementCanvas.getContext('2d');
         measurementContext.font = font;
