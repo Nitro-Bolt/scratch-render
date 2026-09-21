@@ -187,6 +187,16 @@ class RenderWebGL extends EventEmitter {
         /** @type {Drawable[]} */
         this._allDrawables = [];
 
+        /** Renderer-owned camera states, keyed by name. */
+        this._cameras = Object.create(null);
+        this._cameras.default = {
+            name: 'default',
+            x: 0,
+            y: 0,
+            direction: 90,
+            zoom: 100
+        };
+
         /** @type {Skin[]} */
         this._allSkins = [];
 
@@ -726,6 +736,8 @@ class RenderWebGL extends EventEmitter {
         }
         const drawableID = this._nextDrawableId++;
         const drawable = new Drawable(drawableID, this);
+        drawable.cameraName = 'default';
+        drawable.setCamera(this._cameras.default);
         this._allDrawables[drawableID] = drawable;
         this._addToDrawList(drawableID, group);
         // tw: implement high quality render
@@ -1038,6 +1050,25 @@ class RenderWebGL extends EventEmitter {
             );
         }
         return bounds;
+    }
+
+    /**
+     * Get bubble-placement bounds before applying the drawable's camera transform.
+     * This keeps a sprite and its bubble in the same logical coordinate system so
+     * rotating or scaling their camera transforms both around the same anchor.
+     * @param {int} drawableID ID of Drawable to get bubble bounds for
+     * @return {object} bounds in the drawable's camera coordinate space
+     */
+    getBoundsForBubbleInCameraSpace (drawableID) {
+        const drawable = this._allDrawables[drawableID];
+        if (!drawable) return null;
+        const camera = drawable._camera;
+        drawable.setCamera(null);
+        try {
+            return this.getBoundsForBubble(drawableID);
+        } finally {
+            drawable.setCamera(camera);
+        }
     }
 
     /**
@@ -1764,6 +1795,116 @@ class RenderWebGL extends EventEmitter {
         drawable.updatePosition(position);
     }
 
+    createCamera (name) {
+        if (!name || Object.prototype.hasOwnProperty.call(this._cameras, name)) return false;
+        this._cameras[name] = {
+            name,
+            x: 0,
+            y: 0,
+            direction: 90,
+            zoom: 100
+        };
+        return true;
+    }
+
+    resetCameras () {
+        this._cameras = Object.create(null);
+        this._cameras.default = {
+            name: 'default',
+            x: 0,
+            y: 0,
+            direction: 90,
+            zoom: 100
+        };
+        for (let i = 0; i < this._allDrawables.length; i++) {
+            if (this._allDrawables[i]) this.bindDrawableToCamera(i, 'default');
+        }
+    }
+
+    deleteCamera (name) {
+        if (name === 'default' || !Object.prototype.hasOwnProperty.call(this._cameras, name)) return false;
+        for (let i = 0; i < this._allDrawables.length; i++) {
+            const drawable = this._allDrawables[i];
+            if (drawable && drawable.cameraName === name) this.bindDrawableToCamera(i, 'default');
+        }
+        delete this._cameras[name];
+        return true;
+    }
+
+    getCameraNames () {
+        return Object.keys(this._cameras);
+    }
+
+    getCamera (name) {
+        return this._cameras[name] || null;
+    }
+
+    updateCamera (name, properties) {
+        const camera = this.getCamera(name);
+        if (!camera) return false;
+        if (typeof properties.x === 'number' && isFinite(properties.x)) camera.x = properties.x;
+        if (typeof properties.y === 'number' && isFinite(properties.y)) camera.y = properties.y;
+        if (typeof properties.direction === 'number' && isFinite(properties.direction)) {
+            camera.direction = properties.direction;
+        }
+        if (typeof properties.zoom === 'number' && isFinite(properties.zoom)) camera.zoom = properties.zoom;
+        for (let i = 0; i < this._allDrawables.length; i++) {
+            const drawable = this._allDrawables[i];
+            if (drawable && drawable.cameraName === name) drawable._applyCameraTransform();
+        }
+        this.dirty = true;
+        return true;
+    }
+
+    bindDrawableToCamera (drawableID, name) {
+        const drawable = this._allDrawables[drawableID];
+        const camera = this.getCamera(name);
+        if (!drawable || !camera) return false;
+        drawable.cameraName = name;
+        drawable.setCamera(camera);
+        this.dirty = true;
+        return true;
+    }
+
+    getDrawableCamera (drawableID) {
+        const drawable = this._allDrawables[drawableID];
+        return drawable ? drawable.cameraName : null;
+    }
+
+    getDrawableScreenPosition (drawableID) {
+        const drawable = this._allDrawables[drawableID];
+        return drawable ? [drawable._position[0], drawable._position[1]] : null;
+    }
+
+    screenToCameraSpace (x, y, name) {
+        const camera = this.getCamera(name) || this._cameras.default;
+        const zoom = camera.zoom / 100;
+        if (zoom === 0) return [camera.x, camera.y];
+        const radians = (90 - camera.direction) * Math.PI / 180;
+        const cosine = Math.cos(radians);
+        const sine = Math.sin(radians);
+        const scaledX = x / zoom;
+        const scaledY = y / zoom;
+        return [
+            (scaledX * cosine) + (scaledY * sine) - camera.x,
+            (-scaledX * sine) + (scaledY * cosine) - camera.y
+        ];
+    }
+
+    cameraSpaceToScreen (x, y, name) {
+        const camera = this.getCamera(name) || this._cameras.default;
+        const zoom = camera.zoom === 0 ? 1e-10 : camera.zoom / 100;
+        const radians = (90 - camera.direction) * Math.PI / 180;
+        const cosine = Math.cos(radians);
+        const sine = Math.sin(radians);
+        const offsetX = x + camera.x;
+        const offsetY = y + camera.y;
+        return [
+            zoom * ((offsetX * cosine) - (offsetY * sine)),
+            zoom * ((offsetX * sine) + (offsetY * cosine))
+        ];
+    }
+
     /**
      * Update a drawable's direction.
      * @param {number} drawableID The drawable's id.
@@ -1864,7 +2005,9 @@ class RenderWebGL extends EventEmitter {
             // Right now this happens so much on some projects that a warning or exception here can hang the browser.
             return [x, y];
         }
-
+        const screenPosition = this.cameraSpaceToScreen(x, y, drawable.cameraName);
+        x = screenPosition[0];
+        y = screenPosition[1];
         const dx = x - drawable._position[0];
         const dy = y - drawable._position[1];
         const aabb = drawable._skin.getFenceBounds(drawable, __fenceBounds);
@@ -1882,7 +2025,7 @@ class RenderWebGL extends EventEmitter {
         } else if (aabb.bottom + dy > sy) {
             y = Math.floor(drawable._position[1] + (sy - aabb.bottom));
         }
-        return [x, y];
+        return this.screenToCameraSpace(x, y, drawable.cameraName);
     }
 
     /**
