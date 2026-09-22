@@ -109,6 +109,13 @@ class Drawable {
         this._inverseTransformDirty = true;
         this._visible = true;
 
+        // Camera transforms are kept separate from the logical transform supplied by the VM.
+        // This keeps sensing and motion in world coordinates while rendering in view coordinates.
+        this._camera = null;
+        this._cameraPosition = [0, 0];
+        this._cameraDirection = 90;
+        this._cameraScale = [100, 100];
+
         /** A bitmask identifying which effects are currently in use.
          * @readonly
          * @type {int} */
@@ -212,9 +219,15 @@ class Drawable {
      * @param {Array.<number>} position A new position.
      */
     updatePosition (position) {
+        this._cameraPosition[0] = position[0];
+        this._cameraPosition[1] = position[1];
+        this._applyCameraTransform(false);
+    }
+
+    _updateRenderedPosition (position, preservePrecision = false) {
         if (this._position[0] !== position[0] ||
             this._position[1] !== position[1]) {
-            if (this._highQuality) {
+            if (this._highQuality || preservePrecision) {
                 this._position[0] = position[0];
                 this._position[1] = position[1];
             } else {
@@ -231,6 +244,11 @@ class Drawable {
      * @param {number} direction A new direction.
      */
     updateDirection (direction) {
+        this._cameraDirection = direction;
+        this._applyCameraTransform(true);
+    }
+
+    _updateRenderedDirection (direction) {
         if (this._direction !== direction) {
             this._direction = direction;
             this._renderer.dirty = true;
@@ -244,6 +262,12 @@ class Drawable {
      * @param {Array.<number>} scale A new scale.
      */
     updateScale (scale) {
+        this._cameraScale[0] = scale[0];
+        this._cameraScale[1] = scale[1];
+        this._applyCameraTransform(true);
+    }
+
+    _updateRenderedScale (scale) {
         if (this._scale[0] !== scale[0] ||
             this._scale[1] !== scale[1]) {
             this._scale[0] = scale[0];
@@ -253,6 +277,44 @@ class Drawable {
             this._skinScaleDirty = true;
             this.setTransformDirty();
         }
+    }
+
+    /**
+     * Bind this drawable to a renderer-owned camera.
+     * @param {object} camera camera state
+     */
+    setCamera (camera) {
+        this._camera = camera;
+        this._applyCameraTransform(true);
+    }
+
+    /**
+     * Refresh the rendered transform from the logical transform and camera state.
+     * @param {boolean} preservePositionPrecision true to retain fractional camera movement
+     */
+    _applyCameraTransform (preservePositionPrecision = true) {
+        const camera = this._camera;
+        if (!camera) {
+            this._updateRenderedPosition(this._cameraPosition, preservePositionPrecision);
+            this._updateRenderedDirection(this._cameraDirection);
+            this._updateRenderedScale(this._cameraScale);
+            return;
+        }
+        const zoom = camera.zoom === 0 ? 1e-10 : camera.zoom / 100;
+        const radians = (90 - camera.direction) * Math.PI / 180;
+        const cosine = Math.cos(radians);
+        const sine = Math.sin(radians);
+        const x = this._cameraPosition[0] + camera.x;
+        const y = this._cameraPosition[1] + camera.y;
+        this._updateRenderedPosition([
+            zoom * ((x * cosine) - (y * sine)),
+            zoom * ((x * sine) + (y * cosine))
+        ], preservePositionPrecision);
+        this._updateRenderedDirection(this._cameraDirection + camera.direction - 90);
+        this._updateRenderedScale([
+            this._cameraScale[0] * zoom,
+            this._cameraScale[1] * zoom
+        ]);
     }
 
     /**
