@@ -2002,25 +2002,25 @@ class RenderWebGL extends EventEmitter {
         const camera = this.getCamera(name) || this._cameras.default;
         const zoom = camera.zoom / 100;
         if (zoom === 0) return [camera.x, camera.y];
-        const radians = (90 - camera.direction) * Math.PI / 180;
+        const radians = (camera.direction - 90) * Math.PI / 180;
         const cosine = Math.cos(radians);
         const sine = Math.sin(radians);
         const scaledX = x / zoom;
         const scaledY = y / zoom;
         return [
-            (scaledX * cosine) + (scaledY * sine) - camera.x,
-            (-scaledX * sine) + (scaledY * cosine) - camera.y
+            (scaledX * cosine) + (scaledY * sine) + camera.x,
+            (-scaledX * sine) + (scaledY * cosine) + camera.y
         ];
     }
 
     cameraSpaceToScreen (x, y, name) {
         const camera = this.getCamera(name) || this._cameras.default;
         const zoom = camera.zoom === 0 ? 1e-10 : camera.zoom / 100;
-        const radians = (90 - camera.direction) * Math.PI / 180;
+        const radians = (camera.direction - 90) * Math.PI / 180;
         const cosine = Math.cos(radians);
         const sine = Math.sin(radians);
-        const offsetX = x + camera.x;
-        const offsetY = y + camera.y;
+        const offsetX = x - camera.x;
+        const offsetY = y - camera.y;
         return [
             zoom * ((offsetX * cosine) - (offsetY * sine)),
             zoom * ((offsetX * sine) + (offsetY * cosine))
@@ -2321,6 +2321,17 @@ class RenderWebGL extends EventEmitter {
         } finally {
             drawable.dispose();
             delete this._allDrawables[drawableID];
+        }
+    }
+
+    penStampInWorldSpace (penSkinID, stampID) {
+        const drawable = this._allDrawables[stampID];
+        const camera = drawable._camera;
+        drawable.setCamera(null);
+        try {
+            this.penStamp(penSkinID, stampID);
+        } finally {
+            drawable.setCamera(camera);
         }
     }
 

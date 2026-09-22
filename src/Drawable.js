@@ -301,16 +301,16 @@ class Drawable {
             return;
         }
         const zoom = camera.zoom === 0 ? 1e-10 : camera.zoom / 100;
-        const radians = (90 - camera.direction) * Math.PI / 180;
+        const radians = (camera.direction - 90) * Math.PI / 180;
         const cosine = Math.cos(radians);
         const sine = Math.sin(radians);
-        const x = this._cameraPosition[0] + camera.x;
-        const y = this._cameraPosition[1] + camera.y;
+        const x = this._cameraPosition[0] - camera.x;
+        const y = this._cameraPosition[1] - camera.y;
         this._updateRenderedPosition([
             zoom * ((x * cosine) - (y * sine)),
             zoom * ((x * sine) + (y * cosine))
         ], preservePositionPrecision);
-        this._updateRenderedDirection(this._cameraDirection + camera.direction - 90);
+        this._updateRenderedDirection(this._cameraDirection - camera.direction + 90);
         this._updateRenderedScale([
             this._cameraScale[0] * zoom,
             this._cameraScale[1] * zoom
