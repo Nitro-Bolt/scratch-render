@@ -259,6 +259,7 @@ class RenderWebGL extends EventEmitter {
 
         // nb: multiple Pen papers can each own a Pen skin.
         this._penSkinIds = new Set();
+        this._tiledPenLayers = Object.create(null);
 
         // nb: reusable resources for rasterizing text before stamping it onto a Pen skin.
         this._penTextMeasurementCanvas = document.createElement('canvas');
@@ -510,6 +511,16 @@ class RenderWebGL extends EventEmitter {
      */
     _setNativeSize (width, height) {
         this._nativeSize = [width, height];
+        for (const id of Object.keys(this._tiledPenLayers)) {
+            const tiles = this._tiledPenLayers[id].tiles;
+            for (let i = 0; i < tiles.length; i++) {
+                const tile = tiles[i];
+                tile.centerX = tile.x * width;
+                tile.centerY = tile.y * height;
+                this._allSkins[tile.skinId]._tiledPenOffset = [tile.centerX, tile.centerY];
+                this.updateDrawablePosition(tile.drawableId, [tile.centerX, tile.centerY]);
+            }
+        }
         this._updateOverlays();
         this.emit(RenderConstants.Events.NativeSizeChanged, {newSize: this._nativeSize});
     }
@@ -625,6 +636,108 @@ class RenderWebGL extends EventEmitter {
         return skinId;
     }
 
+    createTiledPenSkin () {
+        const id = this._nextSkinId++;
+        this._tiledPenLayers[id] = {
+            tiles: [],
+            tileLookup: Object.create(null),
+            visible: true,
+            order: -Infinity
+        };
+        return id;
+    }
+
+    setTiledPenSkinVisible (id, visible) {
+        const layer = this._tiledPenLayers[id];
+        layer.visible = visible;
+        for (let i = 0; i < layer.tiles.length; i++) {
+            this.updateDrawableVisible(layer.tiles[i].drawableId, visible);
+        }
+    }
+
+    setTiledPenSkinOrder (id, order) {
+        const layer = this._tiledPenLayers[id];
+        layer.order = order;
+        for (let i = 0; i < layer.tiles.length; i++) {
+            this.setDrawableOrder(layer.tiles[i].drawableId, order, 'pen');
+        }
+    }
+
+    penStampTiledLayer (destinationSkinId, sourceSkinId) {
+        const source = this._tiledPenLayers[sourceSkinId];
+        for (let i = 0; i < source.tiles.length; i++) {
+            this.penStamp(destinationSkinId, source.tiles[i].drawableId);
+        }
+    }
+
+    getPenSkinIds (id, createCenterTile = false) {
+        const layer = this._tiledPenLayers[id];
+        if (!layer) return [id];
+        if (createCenterTile) this._getPenTile(layer, 0, 0, true);
+        return layer.tiles.map(tile => tile.skinId);
+    }
+
+    getPenDrawableIds (id, createCenterTile = false) {
+        const layer = this._tiledPenLayers[id];
+        if (!layer) {
+            const skin = this._allSkins[id];
+            if (!skin) return [];
+            const drawableId = this._allDrawables.findIndex(drawable => drawable && drawable.skin === skin);
+            return drawableId < 0 ? [] : [drawableId];
+        }
+        if (createCenterTile) this._getPenTile(layer, 0, 0, true);
+        return layer.tiles.map(tile => tile.drawableId);
+    }
+
+    getPenSkinIdAt (id, x, y) {
+        const layer = this._tiledPenLayers[id];
+        if (!layer) return id;
+        const tileX = Math.floor((x + (this._nativeSize[0] / 2)) / this._nativeSize[0]);
+        const tileY = Math.floor((y + (this._nativeSize[1] / 2)) / this._nativeSize[1]);
+        return this._getPenTile(layer, tileX, tileY, true).skinId;
+    }
+
+    getPenDrawableIdAt (id, x, y) {
+        const layer = this._tiledPenLayers[id];
+        if (!layer) return this.getPenDrawableIds(id)[0];
+        const tileX = Math.floor((x + (this._nativeSize[0] / 2)) / this._nativeSize[0]);
+        const tileY = Math.floor((y + (this._nativeSize[1] / 2)) / this._nativeSize[1]);
+        return this._getPenTile(layer, tileX, tileY, true).drawableId;
+    }
+
+    _getPenTile (layer, tileX, tileY, create) {
+        const key = `${tileX},${tileY}`;
+        if (layer.tileLookup[key]) return layer.tileLookup[key];
+        if (!create) return null;
+        const skinId = this.createPenSkin();
+        const drawableId = this.createDrawable('pen');
+        const centerX = tileX * this._nativeSize[0];
+        const centerY = tileY * this._nativeSize[1];
+        this.updateDrawableSkinId(drawableId, skinId);
+        this.updateDrawablePosition(drawableId, [centerX, centerY]);
+        this.updateDrawableVisible(drawableId, layer.visible);
+        this.setDrawableOrder(drawableId, layer.order, 'pen');
+        const tile = {x: tileX, y: tileY, centerX, centerY, skinId, drawableId};
+        this._allSkins[skinId]._tiledPenOffset = [centerX, centerY];
+        layer.tiles.push(tile);
+        layer.tileLookup[key] = tile;
+        return tile;
+    }
+
+    _forPenTilesInBounds (layer, left, right, bottom, top, callback) {
+        const width = this._nativeSize[0];
+        const height = this._nativeSize[1];
+        const minX = Math.floor((left + (width / 2)) / width);
+        const maxX = Math.floor((right + (width / 2)) / width);
+        const minY = Math.floor((bottom + (height / 2)) / height);
+        const maxY = Math.floor((top + (height / 2)) / height);
+        for (let tileY = minY; tileY <= maxY; tileY++) {
+            for (let tileX = minX; tileX <= maxX; tileX++) {
+                callback(this._getPenTile(layer, tileX, tileY, true));
+            }
+        }
+    }
+
     /**
      * Create a new SVG skin using the text bubble svg creator. The rotation center
      * is always placed at the top left.
@@ -715,6 +828,15 @@ class RenderWebGL extends EventEmitter {
      * @param {!int} skinId - The ID of the skin to destroy.
      */
     destroySkin (skinId) {
+        const tiledLayer = this._tiledPenLayers[skinId];
+        if (tiledLayer) {
+            for (let i = 0; i < tiledLayer.tiles.length; i++) {
+                this.destroyDrawable(tiledLayer.tiles[i].drawableId, 'pen');
+                this.destroySkin(tiledLayer.tiles[i].skinId);
+            }
+            delete this._tiledPenLayers[skinId];
+            return;
+        }
         const oldSkin = this._allSkins[skinId];
         oldSkin.dispose();
         delete this._allSkins[skinId];
@@ -2034,6 +2156,16 @@ class RenderWebGL extends EventEmitter {
      */
     penClear (penSkinID) {
         this.dirty = true;
+        const tiledLayer = this._tiledPenLayers[penSkinID];
+        if (tiledLayer) {
+            for (let i = tiledLayer.tiles.length - 1; i >= 0; i--) {
+                this.destroyDrawable(tiledLayer.tiles[i].drawableId, 'pen');
+                this.destroySkin(tiledLayer.tiles[i].skinId);
+            }
+            tiledLayer.tiles.length = 0;
+            tiledLayer.tileLookup = Object.create(null);
+            return;
+        }
         const skin = /** @type {PenSkin} */ this._allSkins[penSkinID];
         skin.clear();
     }
@@ -2047,6 +2179,14 @@ class RenderWebGL extends EventEmitter {
      */
     penPoint (penSkinID, penAttributes, x, y) {
         this.dirty = true;
+        const tiledLayer = this._tiledPenLayers[penSkinID];
+        if (tiledLayer) {
+            const radius = (penAttributes.diameter || 1) / 2;
+            this._forPenTilesInBounds(tiledLayer, x - radius, x + radius, y - radius, y + radius, tile => {
+                this.penPoint(tile.skinId, penAttributes, x - tile.centerX, y - tile.centerY);
+            });
+            return;
+        }
         const skin = /** @type {PenSkin} */ this._allSkins[penSkinID];
         skin.drawPoint(penAttributes, x, y);
     }
@@ -2062,6 +2202,17 @@ class RenderWebGL extends EventEmitter {
      */
     penLine (penSkinID, penAttributes, x0, y0, x1, y1) {
         this.dirty = true;
+        const tiledLayer = this._tiledPenLayers[penSkinID];
+        if (tiledLayer) {
+            const radius = (penAttributes.diameter || 1) / 2;
+            this._forPenTilesInBounds(tiledLayer,
+                Math.min(x0, x1) - radius, Math.max(x0, x1) + radius,
+                Math.min(y0, y1) - radius, Math.max(y0, y1) + radius, tile => {
+                    this.penLine(tile.skinId, penAttributes,
+                        x0 - tile.centerX, y0 - tile.centerY, x1 - tile.centerX, y1 - tile.centerY);
+                });
+            return;
+        }
         const skin = /** @type {PenSkin} */ this._allSkins[penSkinID];
         skin.drawLine(penAttributes, x0, y0, x1, y1);
     }
@@ -2121,8 +2272,10 @@ class RenderWebGL extends EventEmitter {
         const baselineY = strokePadding + ascent;
 
         const penSkin = /** @type {PenSkin} */ this._allSkins[penSkinID];
-        if (!(penSkin instanceof PenSkin)) return;
-        const quality = penSkin.renderQuality;
+        const tiledLayer = this._tiledPenLayers[penSkinID];
+        if (!(penSkin instanceof PenSkin) && !tiledLayer) return;
+        const quality = tiledLayer ?
+            (this.useHighQualityRender ? this.canvas.width / this._nativeSize[0] : 1) : penSkin.renderQuality;
         const logicalWidth = Math.min(this.maxTextureDimension / quality,
             Math.max(1, Math.ceil(textWidth + (strokePadding * 2))));
         const logicalHeight = Math.min(this.maxTextureDimension / quality, Math.max(1, Math.ceil(
@@ -2175,8 +2328,11 @@ class RenderWebGL extends EventEmitter {
      * Stamp a Drawable onto a pen layer.
      * @param {int} penSkinID - the unique ID of a Pen Skin.
      * @param {int} stampID - the unique ID of the Drawable to use as the stamp.
+     * @param {number} offsetX - horizontal position of the destination tile.
+     * @param {number} offsetY - vertical position of the destination tile.
+     * @param {boolean} skipClamp - whether to preserve bounds outside the center tile.
      */
-    penStamp (penSkinID, stampID) {
+    penStamp (penSkinID, stampID, offsetX = 0, offsetY = 0, skipClamp = false) {
         const stampDrawable = this._allDrawables[stampID];
         if (
             !stampDrawable ||
@@ -2187,9 +2343,16 @@ class RenderWebGL extends EventEmitter {
         }
 
         const bounds = stampDrawable.getFastBounds();
+        const tiledLayer = this._tiledPenLayers[penSkinID];
+        if (tiledLayer) {
+            this._forPenTilesInBounds(tiledLayer, bounds.left, bounds.right, bounds.bottom, bounds.top, tile => {
+                this.penStamp(tile.skinId, stampID, tile.centerX, tile.centerY, true);
+            });
+            return;
+        }
         // Ideally we wouldn't need to check offscreenTouching at all here, but the camera extensions
         // do too many crazy things to risk changing this control flow.
-        if (!this.offscreenTouching) {
+        if (!this.offscreenTouching && !skipClamp) {
             bounds.clamp(this._xLeft, this._xRight, this._yBottom, this._yTop);
         }
         if (bounds.width === 0 || bounds.height === 0) {
@@ -2213,8 +2376,8 @@ class RenderWebGL extends EventEmitter {
         bounds.bottom *= quality;
         bounds.snapToInt();
         gl.viewport(
-            (this._nativeSize[0] * 0.5 * quality) + bounds.left,
-            (this._nativeSize[1] * 0.5 * quality) - bounds.top,
+            (this._nativeSize[0] * 0.5 * quality) + bounds.left - (offsetX * quality),
+            (this._nativeSize[1] * 0.5 * quality) - bounds.top + (offsetY * quality),
             bounds.width,
             bounds.height
         );
