@@ -48,9 +48,6 @@ importers:
       babel-loader:
         specifier: 7.1.5
         version: 7.1.5(babel-core@6.26.3)(webpack@4.47.0)
-      babel-polyfill:
-        specifier: 6.26.0
-        version: 6.26.0
       babel-preset-env:
         specifier: 1.7.0
         version: 1.7.0
@@ -84,9 +81,6 @@ importers:
       tap:
         specifier: 11.1.5
         version: 11.1.5
-      travis-after-all:
-        specifier: 1.4.5
-        version: 1.4.5
       uglifyjs-webpack-plugin:
         specifier: 1.3.0
         version: 1.3.0(webpack@4.47.0)
@@ -709,9 +703,6 @@ packages:
 
   babel-plugin-transform-strict-mode@6.24.1:
     resolution: {integrity: sha512-j3KtSpjyLSJxNoCDrhwiJad8kw0gJ9REGj8/CqL0HeRyLnvUNYV9zcqluL6QJSXh3nfsLEmSLvwRfGzrgR96Pw==}
-
-  babel-polyfill@6.26.0:
-    resolution: {integrity: sha512-F2rZGQnAdaHWQ8YAoeRbukc7HS9QgdgeyJ0rQDd485v9opwuPvjpPFcOOT/WmkKTdgy9ESgSPXDcTNpzrGr6iQ==}
 
   babel-preset-env@1.7.0:
     resolution: {integrity: sha512-9OR2afuKDneX2/q2EurSftUYM0xGu4O2D9adAhVfADDhrYDaxXV0rBbevVYoY9n6nyX1PmQW/0jtpJvUNr9CHg==}
@@ -3178,9 +3169,6 @@ packages:
   regenerate@1.4.2:
     resolution: {integrity: sha512-zrceR/XhGYU/d/opr2EKO7aRHUeiBI8qjtfHqADTwZd6Szfy16la6kqD0MIUs5z5hx6AaKa+PixpPrR289+I0A==}
 
-  regenerator-runtime@0.10.5:
-    resolution: {integrity: sha512-02YopEIhAgiBHWeoTiA8aitHDt8z6w+rQqNuIftlM+ZtvSl/brTouaU7DW6GO/cHtvxJvS4Hwv2ibKdxIRi24w==}
-
   regenerator-runtime@0.11.1:
     resolution: {integrity: sha512-MguG95oij0fC3QV3URf4V2SDYGJhJnJGqvIIgdECeODCT98wSWDAJ94SSuVpYQUoTcGUIL6L4yNB7j1DFFHSBg==}
 
@@ -3738,11 +3726,6 @@ packages:
 
   transformation-matrix@1.15.0:
     resolution: {integrity: sha512-808EqPQbmUD6/IMpWUXLOZcblCHf9xaiB+un0RYNNE9+6VRjoiw6Be8R32tZ0ips1PX/15tlnA2Ev4UUgg827Q==}
-
-  travis-after-all@1.4.5:
-    resolution: {integrity: sha512-4DztMw/2e+96IdRAa3+gRJvyuZwN0Sn4CMiVAkZ9zsP9fVSxb/oJ949UR2q8POL23qd5tDD+rMOlydJ9OKfHeQ==}
-    deprecated: 'The functionality this package provided is now supported natively by Travis CI via Build Stages (see: https://blog.travis-ci.com/2017-05-11-introducing-build-stages).'
-    hasBin: true
 
   trim-repeated@1.0.0:
     resolution: {integrity: sha512-pkonvlKk8/ZuR0D5tLW8ljt5I8kmxp2XKymhepUeOdCEfKpZaktSArkLHZt76OB1ZvO9bssUsDty4SWhLvZpLg==}
@@ -4970,12 +4953,6 @@ snapshots:
     dependencies:
       babel-runtime: 6.26.0
       babel-types: 6.26.0
-
-  babel-polyfill@6.26.0:
-    dependencies:
-      babel-runtime: 6.26.0
-      core-js: 2.6.12
-      regenerator-runtime: 0.10.5
 
   babel-preset-env@1.7.0:
     dependencies:
@@ -7929,8 +7906,6 @@ snapshots:
 
   regenerate@1.4.2: {}
 
-  regenerator-runtime@0.10.5: {}
-
   regenerator-runtime@0.11.1: {}
 
   regenerator-transform@0.10.1:
@@ -8696,8 +8671,6 @@ snapshots:
       punycode: 2.1.1
 
   transformation-matrix@1.15.0: {}
-
-  travis-after-all@1.4.5: {}
 
   trim-repeated@1.0.0:
     dependencies:
