@@ -53,7 +53,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 
 ## Installation
 ```bash
-npm install https://github.com/LLK/scratch-render.git
+pnpm add https://github.com/LLK/scratch-render.git
 ```
 
 ## Setup
@@ -96,7 +96,7 @@ renderer.connectWorker(worker);
 
 ## Standalone Build
 ```bash
-npm run build
+pnpm run build
 ```
 
 ```html
@@ -109,7 +109,7 @@ npm run build
 
 ## Testing
 ```bash
-npm test
+pnpm test
 ```
 
 ## Donate

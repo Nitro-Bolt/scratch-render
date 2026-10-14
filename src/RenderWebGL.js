@@ -1,5 +1,7 @@
 const EventEmitter = require('events');
 
+const rendererStyles = require('./renderer.css?source');
+
 const hull = require('@turbowarp/ancient-hull.js');
 const twgl = require('twgl.js');
 
@@ -100,17 +102,15 @@ const lazilyLoadTextWrapper = () => {
     return _TextWrapper;
 };
 
-let _stylesheet;
+let stylesheet;
 const loadStyles = () => {
-    if (!_stylesheet) {
-        _stylesheet = document.createElement('style');
-        // eslint-disable-next-line global-require
-        _stylesheet.textContent = require('!raw-loader!./renderer.css');
-        _stylesheet.className = 'scratch-render-styles';
-        document.head.appendChild(_stylesheet);
+    if (!stylesheet) {
+        stylesheet = document.createElement('style');
+        stylesheet.textContent = rendererStyles;
+        stylesheet.className = 'scratch-render-styles';
+        document.head.appendChild(stylesheet);
     }
 };
-
 
 class RenderWebGL extends EventEmitter {
     /**
@@ -282,7 +282,7 @@ class RenderWebGL extends EventEmitter {
         this.overlayContainer.className = 'scratch-render-overlays';
 
         /**
-         * @type {Array<{container: HTMLElement; userElement: HTMLElement; mode: string;}>}
+         * @type {Array<{container: HTMLElement, userElement: HTMLElement, mode: string}>}
          */
         this._overlays = [];
 

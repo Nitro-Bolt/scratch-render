@@ -1,5 +1,6 @@
-const LineBreaker = require('!ify-loader!linebreak');
-const GraphemeBreaker = require('!ify-loader!grapheme-breaker');
+const LineBreaker = require('linebreak');
+
+const graphemeSegmenter = new Intl.Segmenter('en', {granularity: 'grapheme'});
 
 /**
  * Tell this text wrapper to use a specific measurement provider.
@@ -63,10 +64,7 @@ class TextWrapper {
                 const wordWidth = this._measurementProvider.measureText(word);
                 if (wordWidth > maxWidth) {
                     // The next word can't even fit on a line by itself. Consume it one grapheme cluster at a time.
-                    let lastCluster = 0;
-                    let nextCluster;
-                    while (lastCluster !== (nextCluster = GraphemeBreaker.nextBreak(word, lastCluster))) {
-                        const cluster = word.substring(lastCluster, nextCluster);
+                    for (const {segment: cluster} of graphemeSegmenter.segment(word)) {
                         proposedLine = (currentLine || '').concat(cluster);
                         proposedLineWidth = this._measurementProvider.measureText(proposedLine);
                         if ((currentLine === null) || (proposedLineWidth <= maxWidth)) {
@@ -77,7 +75,6 @@ class TextWrapper {
                             lines.push(currentLine);
                             currentLine = cluster;
                         }
-                        lastCluster = nextCluster;
                     }
                 } else {
                     // The next word can fit on the next line. Finish the current line and move on.
