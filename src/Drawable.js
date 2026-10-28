@@ -108,6 +108,7 @@ class Drawable {
         this._inverseMatrix = twgl.m4.identity();
         this._inverseTransformDirty = true;
         this._visible = true;
+        this._viewportCulling = false;
 
         // Camera transforms are kept separate from the logical transform supplied by the VM.
         // This keeps sensing and motion in world coordinates while rendering in view coordinates.

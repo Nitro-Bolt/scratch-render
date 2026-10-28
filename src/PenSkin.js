@@ -74,6 +74,7 @@ class PenSkin extends Skin {
 
         // tw: keep track of native size
         this._nativeSize = renderer.getNativeSize();
+        this._worldPosition = [0, 0];
 
         const NO_EFFECTS = 0;
         /** @type {twgl.ProgramInfo} */

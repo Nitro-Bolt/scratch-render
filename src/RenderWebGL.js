@@ -20,6 +20,7 @@ const log = require('./util/log');
 const __isTouchingDrawablesPoint = twgl.v3.create();
 const __candidatesBounds = new Rectangle();
 const __fenceBounds = new Rectangle();
+const __viewportBounds = new Rectangle();
 const __touchingColor = new Uint8ClampedArray(4);
 const __blendColor = new Uint8ClampedArray(4);
 
@@ -630,6 +631,18 @@ class RenderWebGL extends EventEmitter {
     }
 
     /**
+     * Set the world-space center represented by a Pen skin.
+     * @param {number} skinId Pen skin ID
+     * @param {number} x World X coordinate
+     * @param {number} y World Y coordinate
+     */
+    updatePenSkinWorldPosition (skinId, x, y) {
+        const skin = this._allSkins[skinId];
+        if (!(skin instanceof PenSkin)) return;
+        skin._worldPosition = [x, y];
+    }
+
+    /**
      * Create a new SVG skin using the text bubble svg creator. The rotation center
      * is always placed at the top left.
      * @param {!string} type - either "say" or "think".
@@ -782,6 +795,16 @@ class RenderWebGL extends EventEmitter {
             return;
         }
         drawable.interactive = false;
+    }
+
+    /**
+     * Mark a drawable so normal stage rendering skips it while it is entirely offscreen.
+     * @param {number} drawableID The drawable's ID
+     */
+    markDrawableForViewportCulling (drawableID) {
+        const drawable = this._allDrawables[drawableID];
+        if (!drawable) return;
+        drawable._viewportCulling = true;
     }
 
     /**
@@ -994,7 +1017,8 @@ class RenderWebGL extends EventEmitter {
         this._drawThese(this._drawList, ShaderManager.DRAW_MODE.default, this._projection, {
             framebufferWidth: gl.canvas.width,
             framebufferHeight: gl.canvas.height,
-            skipPrivateSkins: snapshotRequested
+            skipPrivateSkins: snapshotRequested,
+            cullOffscreen: true
         });
         if (snapshotRequested) {
             const snapshot = gl.canvas.toDataURL();
@@ -2092,20 +2116,21 @@ class RenderWebGL extends EventEmitter {
      * @param {object} attributes - CSS-compatible font and color attributes.
      * @param {number} x - Scratch x coordinate of the first baseline.
      * @param {number} y - Scratch y coordinate of the first baseline.
+     * @param {Function} [getPenTargets] - callback which selects shifted pen skins for the text bounds.
      * @returns {Promise<void>|void} resolves after the text has been drawn if its font must load
      */
-    penText (penSkinID, text, attributes, x, y) {
+    penText (penSkinID, text, attributes, x, y, getPenTargets) {
         const font = `${attributes.italic ? 'italic ' : ''}${attributes.weight} ` +
             `${attributes.size}px ${attributes.family}`;
         if (!document.fonts.check(font, text)) {
             return document.fonts.load(font, text).then(() => this._drawPenText(
-                penSkinID, text, attributes, x, y, font
+                penSkinID, text, attributes, x, y, font, getPenTargets
             ));
         }
-        this._drawPenText(penSkinID, text, attributes, x, y, font);
+        this._drawPenText(penSkinID, text, attributes, x, y, font, getPenTargets);
     }
 
-    _drawPenText (penSkinID, text, attributes, x, y, font) {
+    _drawPenText (penSkinID, text, attributes, x, y, font, getPenTargets) {
         const measurementContext = this._penTextMeasurementContext;
         measurementContext.font = font;
         measurementContext.textAlign = attributes.alignment;
@@ -2115,7 +2140,9 @@ class RenderWebGL extends EventEmitter {
             const stageLeft = -this._nativeSize[0] / 2;
             const stageRight = this._nativeSize[0] / 2;
             let wrapWidth;
-            if (attributes.alignment === 'right') {
+            if (getPenTargets) {
+                wrapWidth = this._nativeSize[0];
+            } else if (attributes.alignment === 'right') {
                 wrapWidth = x - stageLeft;
             } else if (attributes.alignment === 'center') {
                 wrapWidth = Math.min(x - stageLeft, stageRight - x) * 2;
@@ -2183,19 +2210,33 @@ class RenderWebGL extends EventEmitter {
         this._allDrawables[drawableID] = drawable;
 
         try {
-            this.penStamp(penSkinID, drawableID);
+            if (getPenTargets) {
+                const targets = getPenTargets(drawable.getFastBounds());
+                for (const target of targets) {
+                    this.penStamp(target.skinId, drawableID, target.x, target.y, true);
+                }
+            } else {
+                this.penStamp(penSkinID, drawableID);
+            }
         } finally {
             drawable.dispose();
             delete this._allDrawables[drawableID];
         }
     }
 
-    penStampInWorldSpace (penSkinID, stampID) {
+    penStampInWorldSpace (penSkinID, stampID, getPenTargets) {
         const drawable = this._allDrawables[stampID];
         const camera = drawable._camera;
         drawable.setCamera(null);
         try {
-            this.penStamp(penSkinID, stampID);
+            if (getPenTargets) {
+                const targets = getPenTargets(drawable.getFastBounds());
+                for (const target of targets) {
+                    this.penStamp(target.skinId, stampID, target.x, target.y, true);
+                }
+            } else {
+                this.penStamp(penSkinID, stampID);
+            }
         } finally {
             drawable.setCamera(camera);
         }
@@ -2205,8 +2246,11 @@ class RenderWebGL extends EventEmitter {
      * Stamp a Drawable onto a pen layer.
      * @param {int} penSkinID - the unique ID of a Pen Skin.
      * @param {int} stampID - the unique ID of the Drawable to use as the stamp.
+     * @param {number} [penX=0] - world X coordinate of the pen skin's center.
+     * @param {number} [penY=0] - world Y coordinate of the pen skin's center.
+     * @param {boolean} [clipToPenSkin=false] - whether to clip the stamp to the shifted pen skin.
      */
-    penStamp (penSkinID, stampID) {
+    penStamp (penSkinID, stampID, penX = 0, penY = 0, clipToPenSkin = false) {
         const stampDrawable = this._allDrawables[stampID];
         if (
             !stampDrawable ||
@@ -2216,10 +2260,21 @@ class RenderWebGL extends EventEmitter {
             return;
         }
 
-        const bounds = stampDrawable.getFastBounds();
+        let bounds = stampDrawable.getFastBounds();
+        if (clipToPenSkin) {
+            const penBounds = new Rectangle();
+            penBounds.initFromBounds(
+                penX + this._xLeft,
+                penX + this._xRight,
+                penY + this._yBottom,
+                penY + this._yTop
+            );
+            if (!bounds.intersects(penBounds)) return;
+            bounds = Rectangle.intersect(bounds, penBounds);
+        }
         // Ideally we wouldn't need to check offscreenTouching at all here, but the camera extensions
         // do too many crazy things to risk changing this control flow.
-        if (!this.offscreenTouching) {
+        if (!clipToPenSkin && !this.offscreenTouching) {
             bounds.clamp(this._xLeft, this._xRight, this._yBottom, this._yTop);
         }
         if (bounds.width === 0 || bounds.height === 0) {
@@ -2243,8 +2298,8 @@ class RenderWebGL extends EventEmitter {
         bounds.bottom *= quality;
         bounds.snapToInt();
         gl.viewport(
-            (this._nativeSize[0] * 0.5 * quality) + bounds.left,
-            (this._nativeSize[1] * 0.5 * quality) - bounds.top,
+            (this._nativeSize[0] * 0.5 * quality) + bounds.left - (penX * quality),
+            (this._nativeSize[1] * 0.5 * quality) - bounds.top + (penY * quality),
             bounds.width,
             bounds.height
         );
@@ -2383,12 +2438,18 @@ class RenderWebGL extends EventEmitter {
      * @param {int} opts.framebufferWidth The width of the framebuffer being drawn onto. Defaults to "native" width
      * @param {int} opts.framebufferHeight The height of the framebuffer being drawn onto. Defaults to "native" height
      * @param {boolean} opts.skipPrivateSkins Do not draw private skins.
+     * @param {boolean} opts.cullOffscreen Skip marked drawables which are outside the stage viewport.
      * @private
      */
     _drawThese (drawables, drawMode, projection, opts = {}) {
 
         const gl = this._gl;
         let currentShader = null;
+        let viewportBounds;
+        if (opts.cullOffscreen) {
+            viewportBounds = __viewportBounds;
+            viewportBounds.initFromBounds(this._xLeft, this._xRight, this._yBottom, this._yTop);
+        }
 
         const framebufferSpaceScaleDiffers = (
             'framebufferWidth' in opts && 'framebufferHeight' in opts &&
@@ -2419,6 +2480,12 @@ class RenderWebGL extends EventEmitter {
 
             // Skip drawables with no skin.
             if (!drawable.skin) continue;
+
+            if (
+                opts.cullOffscreen &&
+                drawable._viewportCulling &&
+                !drawable.getFastBounds().intersects(viewportBounds)
+            ) continue;
 
             // Skip private skins, if requested.
             if (opts.skipPrivateSkins && drawable.skin.private) continue;
