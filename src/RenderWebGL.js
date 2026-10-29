@@ -15,6 +15,7 @@ const SVGSkin = require('./SVGSkin');
 const TextBubbleSkin = require('./TextBubbleSkin');
 const EffectTransform = require('./EffectTransform');
 const CanvasMeasurementProvider = require('./util/canvas-measurement-provider');
+const multiplyTransformComponent = require('./util/camera-math');
 const log = require('./util/log');
 
 const __isTouchingDrawablesPoint = twgl.v3.create();
@@ -1905,8 +1906,8 @@ class RenderWebGL extends EventEmitter {
         const scaledX = x / zoom;
         const scaledY = y / zoom;
         return [
-            (scaledX * cosine) + (scaledY * sine) + camera.x,
-            (-scaledX * sine) + (scaledY * cosine) + camera.y
+            multiplyTransformComponent(scaledX, cosine) + multiplyTransformComponent(scaledY, sine) + camera.x,
+            -multiplyTransformComponent(scaledX, sine) + multiplyTransformComponent(scaledY, cosine) + camera.y
         ];
     }
 
@@ -1919,8 +1920,8 @@ class RenderWebGL extends EventEmitter {
         const offsetX = x - camera.x;
         const offsetY = y - camera.y;
         return [
-            zoom * ((offsetX * cosine) - (offsetY * sine)),
-            zoom * ((offsetX * sine) + (offsetY * cosine))
+            zoom * (multiplyTransformComponent(offsetX, cosine) - multiplyTransformComponent(offsetY, sine)),
+            zoom * (multiplyTransformComponent(offsetX, sine) + multiplyTransformComponent(offsetY, cosine))
         ];
     }
 

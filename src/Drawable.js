@@ -4,6 +4,7 @@ const Rectangle = require('./Rectangle');
 const RenderConstants = require('./RenderConstants');
 const ShaderManager = require('./ShaderManager');
 const EffectTransform = require('./EffectTransform');
+const multiplyTransformComponent = require('./util/camera-math');
 const log = require('./util/log');
 
 /**
@@ -307,8 +308,8 @@ class Drawable {
         const x = this._cameraPosition[0] - camera.x;
         const y = this._cameraPosition[1] - camera.y;
         this._updateRenderedPosition([
-            zoom * ((x * cosine) - (y * sine)),
-            zoom * ((x * sine) + (y * cosine))
+            zoom * (multiplyTransformComponent(x, cosine) - multiplyTransformComponent(y, sine)),
+            zoom * (multiplyTransformComponent(x, sine) + multiplyTransformComponent(y, cosine))
         ], preservePositionPrecision);
         this._updateRenderedDirection(this._cameraDirection - camera.direction + 90);
         this._updateRenderedScale([
