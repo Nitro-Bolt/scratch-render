@@ -2177,9 +2177,10 @@ class RenderWebGL extends EventEmitter {
         const drawable = new Drawable(drawableID, this);
         drawable.setHighQuality(this.useHighQualityRender);
         drawable.skin = textSkin;
+        const snapToPenPixel = coordinate => Math.round(coordinate * quality) / quality;
         drawable.updatePosition([
-            x + (logicalWidth / 2) - baselineX,
-            y + baselineY - (logicalHeight / 2)
+            snapToPenPixel(x + (logicalWidth / 2) - baselineX),
+            snapToPenPixel(y + baselineY - (logicalHeight / 2))
         ]);
         this._allDrawables[drawableID] = drawable;
 
